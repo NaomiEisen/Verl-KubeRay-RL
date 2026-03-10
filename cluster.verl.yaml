@@ -1,0 +1,97 @@
+apiVersion: ray.io/v1
+kind: RayCluster
+metadata:
+  name: verl-cluster
+  namespace: <your-namespace>
+spec:
+  rayVersion: '2.47.1'
+  headGroupSpec:
+    rayStartParams:
+      num-cpus: "4"
+    template:
+      spec:
+        containers:
+        - name: ray-head
+          image: verlai/verl:vllm011.latest
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                - /bin/bash
+                - -c
+                - |
+                  # Redirect all output to a log so we can debug if it hangs
+                  exec > /tmp/setup_log.txt 2>&1
+                  echo "Starting setup..."
+
+                  git clone https://github.com/volcengine/verl /tmp/verl
+                  cd /tmp/verl
+
+                  # 1. Create the cache
+                  mkdir -p /tmp/verl/hf_cache/datasets
+                  
+                  # 3. Install verl (absolute path)
+                  python3 -m pip install --no-deps -e /tmp/verl --user
+                  
+                  # 4. Generate data
+                  python3 /tmp/verl/examples/data_preprocess/gsm8k.py --local_dir /tmp/verl/data/gsm8k
+                  
+                  # 5. Model Pre-fetch
+                  python3 -c "import transformers; transformers.pipeline('text-generation', model='Qwen/Qwen2.5-0.5B-Instruct')"
+                  
+                  echo "Setup complete" > /tmp/verl_ready.txt
+          env:
+          - name: TOKENIZERS_PARALLELISM
+            value: "false"
+          - name: OMP_NUM_THREADS
+            value: "1"
+          - name: VLLM_USE_V1
+            value: "1"
+          - name: RAY_CHEF_MAX_WORKERS
+            value: "1"
+          - name: VERL_NUM_THREADS
+            value: "1"
+          - name: RAY_NUM_CPUS_PER_PROCESSER
+            value: "1"         # Prevents Ray from thinking it can spawn many sub-tasks
+          - name: HOME
+            value: "/tmp" # Fixes the /.cache permission denied error for JIT compilers
+          - name: FLASHINFER_WORKSPACE_DIR
+            value: "/tmp/flashinfer" # Specifically routes FlashInfer away from root
+          - name: HF_HOME
+            value: "/tmp/verl/hf_cache"
+          - name: HF_DATASETS_CACHE
+            value: "/tmp/verl/hf_cache/datasets"
+          - name: XDG_CACHE_HOME
+            value: "/tmp/verl/hf_cache"
+          - name: HUGGINGFACE_HUB_CACHE
+            value: "/tmp/verl/hf_cache"
+          - name: TRITON_CACHE_DIR
+            value: "/tmp/triton"
+          - name: PYTHONUSERBASE
+            value: "/tmp/.local"
+          - name: PYTHONPATH
+            value: "/tmp/verl"
+          resources:
+            limits:
+              cpu: "32"
+              memory: "96G"
+              nvidia.com/gpu: "1"
+            requests:
+              cpu: "24"
+              memory: "64G"
+              nvidia.com/gpu: "1"
+          ports:
+          - containerPort: 6379
+            name: gcs-server
+          - containerPort: 8265
+            name: dashboard
+          - containerPort: 10001
+            name: client
+          volumeMounts:
+          - mountPath: /dev/shm
+            name: dshm
+        volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+            sizeLimit: "32Gi"
