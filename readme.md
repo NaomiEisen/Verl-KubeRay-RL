@@ -4,7 +4,7 @@ We will use KubeRay for creating VERL training in our OpenShift cluster.
 
 ## Setting up the cluster
 
-The steps are described here:
+All the steps above are taken from here:
 [KubeRay Operator Helm Chart](https://github.com/ray-project/kuberay/tree/7092f76e6f08fa86ad21c37cd8216914dd215975/helm-chart/kuberay-operator)
 
 I chose the approach of installing the CRDs separately from the operator, to keep the permission requirements for each independent.
@@ -16,7 +16,8 @@ helm repo add kuberay https://ray-project.github.io/kuberay-helm/
 helm repo update
 ```
 
-The CRDs are already created in the cluster. If you want to make sure that the cluster you're working on has them, run:
+If you're working on the cluster that I am (details omitted for security), then the CRDs are already created in the cluster :))
+To see wether the cluster you're working on has them, run:
 
 ```bash
 oc get crd | grep ray
@@ -70,7 +71,7 @@ Wait for the pod to be created and ready.
 oc exec -ti <pod-name> -- bash
 cd /tmp/verl
 ```
-
+*If you didn't change the name of the deployment, the pod name should start with verl-cluster.*
 Validate VERL installation:
 
 ```bash
