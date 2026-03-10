@@ -55,7 +55,7 @@ Note that I used the flags for deploying within the namespace, and I skipped the
 
 There are different ways to deploy VERL training with KubeRay using its different CRDs. I tried the most basic one: RayCluster.
 
-You can use my YAML configurations to deploy your RayCluster resource (cluster.verl.yaml), just change the namespace to whatever you need. I included the VERL installation and preparation within the YAML configurations.
+You can use my YAML configurations to deploy your RayCluster resource (cluster.verl.yaml), just change the namespace to whatever you need. I included the VERL installation and preparation within the YAML configurations. It installs the model: `Qwen/Qwen2.5-0.5B-Instruct` and the dataset: `GSM8K`.
 
 ### Deploy the example
 
@@ -87,6 +87,38 @@ ls -lh /tmp/verl/data/gsm8k
 You should see the two files: `train.parquet` and `test.parquet`.
 
 > If some of the files are missing, just repeat the setup code described in the container `postStart` lifecycle hook in the YAML manually.
+
+Now, run the training!
+I run PPO training with this config:
+
+```bash
+PYTHONUNBUFFERED=1 python3 -m verl.trainer.main_ppo \
+data.train_files="/tmp/verl/data/gsm8k/train.parquet" \
+data.val_files="/tmp/verl/data/gsm8k/test.parquet" \
+data.train_batch_size=256 \
+data.max_prompt_length=256 \
+data.max_response_length=128 \
+actor_rollout_ref.model.path="Qwen/Qwen2.5-0.5B-Instruct" \
+actor_rollout_ref.actor.ppo_mini_batch_size=256 \
+actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=16 \
+actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=32 \
+actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
+actor_rollout_ref.rollout.gpu_memory_utilization=0.4 \
+actor_rollout_ref.rollout.name=vllm \
+critic.model.path="Qwen/Qwen2.5-0.5B-Instruct" \
+critic.ppo_micro_batch_size_per_gpu=16 \
+trainer.logger="['console']" \
+trainer.val_before_train=False \
+trainer.n_gpus_per_node=1 \
+trainer.nnodes=1 \
+trainer.test_freq=-1 \
+trainer.save_freq=-1 \
+trainer.total_epochs=1 \
++model.dtype=bfloat16 2>&1 | tee /tmp/verl/verl_ppo_training.log
+```
+
+It will take about 10 minutes.
+I included an example output log in this repo: [successful_run_example.log](successful_run_example.log).
 
 ## Understanding the thread/CPU configuration (still under investigation)
 
